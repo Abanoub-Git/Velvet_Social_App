@@ -1,0 +1,1 @@
+export { default as authenticationController } from "./authetication.controller";
