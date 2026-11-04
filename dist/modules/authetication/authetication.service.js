@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthenticationService = void 0;
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const exception_1 = require("../../common/exception");
 const repository_1 = require("../../common/repository");
 const service_1 = require("../../common/service");
@@ -11,25 +12,42 @@ const enum_1 = require("../../common/enum");
 const email_1 = require("../../common/utils/email");
 const utils_1 = require("../../common/utils");
 const security_1 = require("../../common/security");
-const token_security_1 = __importDefault(require("../../common/security/token.security"));
+const service_2 = require("../../common/service");
 const google_auth_library_1 = require("google-auth-library");
 const config_1 = require("../../config");
-const client = new google_auth_library_1.OAuth2Client();
 class AuthenticationService {
     userRepository;
     cacheService;
+    tokenService;
+    client;
     constructor() {
         this.cacheService = service_1.cacheService;
         this.userRepository = new repository_1.UserRepository();
+        this.tokenService = service_2.tokenService;
+        this.client = new google_auth_library_1.OAuth2Client();
     }
-    async loginWithGmail({ idToken }, issuer) {
-        const { name, email, picture } = await this.verifyGoogleAccount(idToken);
-        if (!email) {
-            throw new exception_1.BadRequestException("Google account email is missing");
+    async verifyGoogleAccount(idToken) {
+        if (!idToken) {
+            throw new exception_1.BadRequestException("Google ID token is required");
         }
+        const audience = config_1.WEB_CLIENT_IDS?.includes(",") ? config_1.WEB_CLIENT_IDS.split(",").map((id) => id.trim()).filter(Boolean) : config_1.WEB_CLIENT_IDS;
+        let ticket;
+        try {
+            ticket = await this.client.verifyIdToken({ idToken, audience });
+        }
+        catch (error) {
+            throw new exception_1.BadRequestException(error.message || "Invalid Google ID token");
+        }
+        const payload = ticket.getPayload();
+        if (!payload?.email_verified) {
+            throw new exception_1.BadRequestException("Email is not verified");
+        }
+        return payload;
+    }
+    async LoginWithGmail({ idToken }, issuer) {
+        const { name, email, picture } = await this.verifyGoogleAccount(idToken);
         const existAccount = await this.userRepository.findOne({
-            filter: { email },
-            options: { lean: false }
+            filter: { email: email },
         });
         let user = existAccount;
         if (existAccount) {
@@ -54,28 +72,12 @@ class AuthenticationService {
                 data: { firstName, lastName, email, confirmEmail: new Date(), provider: enum_1.ProviderEnum.GOOGLE, image: picture }
             });
         }
-        if (!user)
-            throw new exception_1.NotfoundException("Invalid account");
-        return await token_security_1.default.createLoginCredentials({ user, issuer });
+        if (!user) {
+            throw new exception_1.NotfoundException("Failed to create or retrieve user");
+        }
+        return { status: 201, data: await this.tokenService.createLoginCredentials({ user, issuer }) };
     }
-    async verifyGoogleAccount(idToken) {
-        if (!idToken) {
-            throw new exception_1.BadRequestException("Google ID token is required");
-        }
-        const audience = config_1.WEB_CLIENT_IDS?.includes(",") ? config_1.WEB_CLIENT_IDS.split(",").map((id) => id.trim()).filter(Boolean) : config_1.WEB_CLIENT_IDS;
-        let ticket;
-        try {
-            ticket = await client.verifyIdToken({ idToken, audience, });
-        }
-        catch (error) {
-            throw new exception_1.BadRequestException(error instanceof Error ? error.message : "Invalid Google ID token");
-        }
-        const payload = ticket.getPayload();
-        if (!payload?.email_verified) {
-            throw new exception_1.BadRequestException("Email is not verified");
-        }
-        return payload;
-    }
+    ;
     async sendEmailOtp({ email, subject, expiresIn = 120, maxTrails = 3, blockInSeconds = 300, title }) {
         const existOTP_TTL = await this.cacheService.ttl({ key: (0, email_1.userEmailKey)({ email, subject }) });
         if (existOTP_TTL > 0) {
@@ -137,13 +139,12 @@ class AuthenticationService {
     }
     async login({ email, password }, issuer) {
         const account = await this.userRepository.findOne({
-            filter: { email, provider: enum_1.ProviderEnum.SYSTEM, confirmEmail: { $exists: true } },
-            options: { lean: false }
+            filter: { email, provider: enum_1.ProviderEnum.SYSTEM, confirmEmail: { $exists: true } }
         });
-        if (!account || !account.password) {
+        if (!account?.password) {
             throw new exception_1.NotfoundException("Invalid email or password");
         }
-        const match = await (0, security_1.compare)(password, account.password);
+        const match = await bcrypt_1.default.compare(password, account.password);
         if (!match) {
             throw new exception_1.NotfoundException("Invalid email or password");
         }
@@ -151,17 +152,14 @@ class AuthenticationService {
             await this.sendEmailOtp({
                 email: account.email,
                 subject: enum_1.EmailSubjectEnum.TWO_STEP_VERIFICATION,
-                title: enum_1.EmailSubjectEnum.TWO_STEP_VERIFICATION
+                title: "Two Step Verification"
             });
             return {
                 twoStepVerification: true,
                 message: "Verification code sent to your email"
             };
         }
-        return await token_security_1.default.createLoginCredentials({
-            user: account,
-            issuer
-        });
+        return await this.tokenService.createLoginCredentials({ user: account, issuer });
     }
     async requestForgotPassword({ email }) {
         const account = await this.userRepository.findOne({
@@ -213,7 +211,7 @@ class AuthenticationService {
         await account.save();
         const result = await Promise.all([
             this.cacheService.keys({
-                prefix: token_security_1.default.userBaseRevokeTokenKey({
+                prefix: service_2.tokenService.userBaseRevokeTokenKey({
                     userId: account._id
                 })
             }),

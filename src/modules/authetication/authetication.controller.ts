@@ -3,21 +3,20 @@ import authService from "./authetication.service";
 import { responseFormatter, validation } from "../../middleware";
 import * as validators from './authentication.validation'
 import { IResponse, IUser } from "../../common/interface";
+import { getIssuer } from "../../common/utils";
+import { ILoginResponse } from "./entities/authentication.entity";
 const router = Router({ strict: true, caseSensitive: true });
 
-
-router.post("/loginWithGmail", 
-    responseFormatter(
-    async (req: Request, res: Response, next: NextFunction): Promise<IResponse> => {
-        const data = await authService.loginWithGmail(req.body, `${req.protocol}://${req.host}`);
-        return { data, status: 200 };
+router.post("/loginWithGmail",responseFormatter(
+    async (req: Request, res: Response, next: NextFunction): Promise<IResponse<ILoginResponse>> => {
+        const {data,status} = await authService.LoginWithGmail(req.body,getIssuer(req))
+        return { data, status: 201 }
     }
-));
+))
 
 
 
-router.post("/signup",validation(validators.signup) ,
-responseFormatter(
+router.post("/signup",validation(validators.signup) ,responseFormatter(
     async (req: Request, res: Response, next: NextFunction): Promise<IResponse<IUser>> => {
         const data = await authService.signup(req.validate.body)
         return { data, status: 201 }
@@ -42,11 +41,10 @@ router.patch("/resend-confirm-email", validation(validators.resendConfirmEmail) 
 
 
 
-router.post("/login", validation(validators.login), 
-responseFormatter(
-    async (req: Request, res: Response, next: NextFunction): Promise<IResponse<any>> => {
-        const data = await authService.login( req.validate.body, `${req.protocol}://${req.get("host")}` );
-        return { data, status: 200 };
+router.post("/login",validation(validators.login) ,responseFormatter(
+    async (req: Request, res: Response, next: NextFunction): Promise<IResponse<ILoginResponse>> => {
+        const data = await authService.login(req.validate.body,getIssuer(req))
+        return { data, status: 201 }
     }
 ));
 
@@ -77,6 +75,7 @@ responseFormatter(
         return { status: 200 };
     }
 ));
+
 
 
 export default router;

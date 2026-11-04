@@ -9,7 +9,7 @@ export interface IUser {
     provider: ProviderEnum;
     phone?: string;
     DOB?: string;
-    confirmEmail?: Date;
+    confirmEmail?: string;
     image?: string;
     coverImage?: string[];
     changeCredentialsTime?: Date;

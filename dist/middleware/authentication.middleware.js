@@ -1,43 +1,33 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthenticationMiddleware = void 0;
-const security_enum_js_1 = require("../common/enum/security.enum.js");
+exports.authorization = exports.authentication = exports.bearerAuth = void 0;
+const security_enum_1 = require("../common/enum/security.enum");
 const domain_exception_js_1 = require("../common/exception/domain.exception.js");
-const token_security_js_1 = __importDefault(require("../common/security/token.security.js"));
-class AuthenticationMiddleware {
-    tokenService;
-    constructor() {
-        this.tokenService = token_security_js_1.default;
-    }
-    async bearerAuth({ req, authorization, tokenType = security_enum_js_1.TokenTypeEnum.ACCESS }) {
-        const { user, payload } = await this.tokenService.decodeToken({ authorization, tokenType });
-        req.user = user;
-        req.payload = payload;
-    }
-    authentication = (tokenType = security_enum_js_1.TokenTypeEnum.ACCESS) => {
-        return async (req, res, next) => {
-            const { authorization } = req.headers;
-            if (!authorization || typeof authorization !== "string") {
-                throw new domain_exception_js_1.UnauthorizedException("Unauthorized Account");
-            }
-            const token = authorization.startsWith("Bearer ")
-                ? authorization.split(" ")[1]
-                : authorization;
-            await this.bearerAuth({ req, authorization: token, tokenType });
-            next();
-        };
+const token_service_1 = require("../common/service/token.service");
+const bearerAuth = async ({ req, tokenType = security_enum_1.TokenTypeEnum.ACCESS }) => {
+    const credential = req.headers["authorization"];
+    const { user, payload } = await token_service_1.tokenService.decodeToken({ authorization: credential, tokenType });
+    req.user = user;
+    req.payload = payload;
+};
+exports.bearerAuth = bearerAuth;
+const authentication = (tokenType = security_enum_1.TokenTypeEnum.ACCESS) => {
+    return async (req, res, next) => {
+        const { authorization } = req.headers;
+        if (!authorization) {
+            throw new domain_exception_js_1.UnauthorizedException("Unauthorized Account");
+        }
+        await (0, exports.bearerAuth)({ req, tokenType });
+        next();
     };
-    authorization = (accessRole) => {
-        return async (req, res, next) => {
-            if (!req.user || req.user.role < accessRole) {
-                throw new domain_exception_js_1.ForbiddenException("Forbidden Account");
-            }
-            next();
-        };
+};
+exports.authentication = authentication;
+const authorization = (accessRole) => {
+    return async (req, res, next) => {
+        if (req.user.role < accessRole) {
+            throw new domain_exception_js_1.ForbiddenException("Forbidden Account");
+        }
+        next();
     };
-}
-exports.AuthenticationMiddleware = AuthenticationMiddleware;
-exports.default = new AuthenticationMiddleware();
+};
+exports.authorization = authorization;

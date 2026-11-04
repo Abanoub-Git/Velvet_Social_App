@@ -1,5 +1,6 @@
-import { ILoginWithGmail, IUser } from "../../common/interface";
-import { ConfirmEmailDto, ResendConfirmEmailDto, ResetPasswordDto, SignupDto } from "./dto/authentication.dto";
+import bcrypt from "bcrypt";
+import { IUser } from "../../common/interface";
+import { ConfirmEmailDto, LoginDto, ResendConfirmEmailDto, ResetPasswordDto, SignupDto } from "./dto/authentication.dto";
 import { BadRequestException, ConflictException, NotfoundException, TooManyRequestException } from "../../common/exception";
 import { UserRepository } from "../../common/repository";
 import {cacheService, CacheService } from "../../common/service";
@@ -7,29 +8,48 @@ import { EmailSubjectEnum, ProviderEnum, TwoStepVerificationEnum } from "../../c
 import { emailEvent, userEmailKey, userEmailTrailsKey } from "../../common/utils/email";
 import { createOtp } from "../../common/utils";
 import { compare, encryption, hash } from "../../common/security";
-import tokenServiceInstance from "../../common/security/token.security";
+import { tokenService, TokenService } from "../../common/service";
+import { ILoginResponse, iLoginWithGmailResponse } from "./entities/authentication.entity";
 import { OAuth2Client, TokenPayload } from "google-auth-library";
 import { WEB_CLIENT_IDS } from "../../config";
-const client = new OAuth2Client();
-
 
 export class AuthenticationService {
     private userRepository : UserRepository
     private cacheService : CacheService
+    private tokenService : TokenService
+    private client : OAuth2Client
     constructor() {
         this.cacheService = cacheService
         this.userRepository = new UserRepository()
+        this.tokenService = tokenService
+        this.client = new OAuth2Client();
     }
 
 
-    async loginWithGmail({ idToken }: ILoginWithGmail, issuer: string) {
-        const { name, email, picture } = await this.verifyGoogleAccount(idToken);
-        if (!email) {
-            throw new BadRequestException("Google account email is missing");
+    async verifyGoogleAccount(idToken:string):Promise<TokenPayload> {
+        if (!idToken) {
+            throw new BadRequestException("Google ID token is required");
         }
+        const audience = WEB_CLIENT_IDS?.includes(",") ? WEB_CLIENT_IDS.split(",").map((id) => id.trim()).filter(Boolean) : WEB_CLIENT_IDS;
+        let ticket;
+        try {
+            ticket = await this.client.verifyIdToken({idToken,audience});
+        } catch (error) {
+            throw new BadRequestException((error as Error).message || "Invalid Google ID token");
+        }
+        const payload = ticket.getPayload();
+        if (!payload?.email_verified) {
+            throw new BadRequestException("Email is not verified");
+        }
+        return payload;
+    }
+
+
+
+    async LoginWithGmail({ idToken }:{ idToken:string }, issuer:string):Promise<iLoginWithGmailResponse>{
+        const { name, email, picture } = await this.verifyGoogleAccount(idToken);
         const existAccount = await this.userRepository.findOne({
-            filter: { email },
-            options: { lean: false }
+            filter: { email:email as string }, //3shan howa shaif en alemail momken yege undefined
         });
         let user = existAccount;
         if (existAccount) {
@@ -47,33 +67,15 @@ export class AuthenticationService {
             let lastName = parts.slice(1).join(" ") || "User";
             if (firstName.length < 2) firstName = `${firstName}_`;
             if (lastName.length < 2) lastName = `${lastName}_`;
-            user = await this.userRepository.createOne({
+            user = await this.userRepository.createOne({      
                 data: {firstName,lastName,email,confirmEmail: new Date(),provider: ProviderEnum.GOOGLE,image: picture}
             });
         }
-        if (!user) throw new NotfoundException("Invalid account");
-        return await tokenServiceInstance.createLoginCredentials({ user, issuer });
-    }
-
-
-    async  verifyGoogleAccount(idToken: string): Promise<TokenPayload> {
-        if (!idToken) {
-            throw new BadRequestException("Google ID token is required");
+        if (!user) {
+            throw new NotfoundException("Failed to create or retrieve user");
         }
-        const audience = WEB_CLIENT_IDS?.includes(",")? WEB_CLIENT_IDS.split(",").map((id: string) => id.trim()).filter(Boolean): WEB_CLIENT_IDS;
-        let ticket;
-        try {
-            ticket = await client.verifyIdToken({idToken,audience,});
-        } catch (error) {
-            throw new BadRequestException(error instanceof Error ? error.message : "Invalid Google ID token");
-        }
-        const payload = ticket.getPayload();
-        if (!payload?.email_verified) {
-            throw new BadRequestException("Email is not verified");
-        }
-        return payload;
-    }
-
+        return {status:201, data:await this.tokenService.createLoginCredentials({ user, issuer })};
+    };
 
 
 
@@ -126,7 +128,7 @@ export class AuthenticationService {
         if (!hashOtp || !await compare(otp, hashOtp)) {
             throw new ConflictException("Invalid OTP")
         }
-        account.confirmEmail = new Date()
+        account.confirmEmail = new Date() as unknown as string
         await account.save()
         await this.cacheService.del({ key: await this.cacheService.keys({ prefix: userEmailKey({ email, subject: EmailSubjectEnum.CONFIRM_EMAIL }) }) }) //3shan myfdlsh memory f alredis mdam et3mlo activation nms7o
         return
@@ -144,16 +146,14 @@ export class AuthenticationService {
     }
 
 
-
-    async login({ email, password }: { email: string; password: string }, issuer: string) {
+    async login({ email, password }: LoginDto, issuer: string):Promise<ILoginResponse> {
         const account = await this.userRepository.findOne({
-            filter: {email, provider: ProviderEnum.SYSTEM, confirmEmail: { $exists: true } },
-            options: { lean: false }
+            filter: {email, provider: ProviderEnum.SYSTEM, confirmEmail: { $exists: true }}
         });
-        if (!account || !account.password) {
+        if (!account?.password) {
             throw new NotfoundException("Invalid email or password");
         }
-        const match = await compare(password, account.password);
+        const match = await bcrypt.compare(password, account.password);
         if (!match) {
             throw new NotfoundException("Invalid email or password");
         }
@@ -161,17 +161,14 @@ export class AuthenticationService {
             await this.sendEmailOtp({
                 email: account.email,
                 subject: EmailSubjectEnum.TWO_STEP_VERIFICATION,
-                title: EmailSubjectEnum.TWO_STEP_VERIFICATION
+                title: "Two Step Verification"
             });
             return {
                 twoStepVerification: true,
                 message: "Verification code sent to your email"
             };
         }
-        return await tokenServiceInstance.createLoginCredentials({
-            user: account,
-            issuer
-        });
+        return await this.tokenService.createLoginCredentials({user: account,issuer});
     }
 
 
@@ -235,7 +232,7 @@ export class AuthenticationService {
 
         const result = await Promise.all([
             this.cacheService.keys({
-                prefix: tokenServiceInstance.userBaseRevokeTokenKey({
+                prefix: tokenService.userBaseRevokeTokenKey({
                     userId: account._id
                 })
             }),
@@ -253,8 +250,6 @@ export class AuthenticationService {
 
         return;
     }
-
-
 
 }
 

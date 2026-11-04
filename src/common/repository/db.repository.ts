@@ -27,7 +27,7 @@ export abstract class DatabaseRepository<TRawDocType> {
     }: {
         filter: QueryFilter<TRawDocType>,
         projection?: ProjectionType<TRawDocType> | null | undefined,
-        options?: QueryOptions<TRawDocType> & { lean: true } | null | undefined
+        options: QueryOptions<TRawDocType> & { lean: true } | null | undefined
     }): Promise<FlattenMaps<TRawDocType> | undefined | null>
     
     
@@ -70,7 +70,7 @@ export abstract class DatabaseRepository<TRawDocType> {
     }: {
         id:mongoose.Types.ObjectId,
         projection?: ProjectionType<TRawDocType> | null | undefined,
-        options?: QueryOptions<TRawDocType> & { lean: true } | null | undefined
+        options: QueryOptions<TRawDocType> & { lean: true } | null | undefined
     }): Promise<FlattenMaps<TRawDocType> | undefined | null>
     
     

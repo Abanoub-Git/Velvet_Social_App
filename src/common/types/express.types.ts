@@ -1,8 +1,11 @@
+import { HUser } from "../../DB/model"
+import { JwtPayloadType } from "../service/token.service"
+
 declare module "express-serve-static-core" {
     interface Request {
         validate: any
-        payload: any;
-        user: any;
+        user: HUser
+        payload:JwtPayloadType
     }
 }
 

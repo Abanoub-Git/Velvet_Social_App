@@ -15,7 +15,7 @@ exports.templates = {
         <table border="0" width="50%" style="margin:auto;padding:30px;background-color:#fff;border:1px solid #D4A84F;border-radius:8px;">
         <tr><td>
         <table border="0" width="100%">
-        <tr><td><h1 style="margin:0;color:#111;"><img width="100px" src="https://res.cloudinary.com/dtgbzmpca/image/upload/v1642367682/fire.png"></h1></td><td><p style="text-align:right;"><a href="http://localhost:4200/#/" target="_blank" style="text-decoration:none;color:#D4A84F;font-weight:bold;">View In Website</a></p></td></tr>
+        <tr><td><h1 style="margin:0;color:#111;"><img width="100px" src="https://res.cloudinary.com/ddajommsw/image/upload/v1670702280/Group_35052_icasyu.png"></h1></td><td><p style="text-align:right;"><a href="http://localhost:4200/#/" target="_blank" style="text-decoration:none;color:#D4A84F;font-weight:bold;">View In Website</a></p></td></tr>
         </table>
         </td></tr>
         <tr><td>

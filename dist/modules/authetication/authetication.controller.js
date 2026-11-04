@@ -40,10 +40,11 @@ const express_1 = require("express");
 const authetication_service_1 = __importDefault(require("./authetication.service"));
 const middleware_1 = require("../../middleware");
 const validators = __importStar(require("./authentication.validation"));
+const utils_1 = require("../../common/utils");
 const router = (0, express_1.Router)({ strict: true, caseSensitive: true });
 router.post("/loginWithGmail", (0, middleware_1.responseFormatter)(async (req, res, next) => {
-    const data = await authetication_service_1.default.loginWithGmail(req.body, `${req.protocol}://${req.host}`);
-    return { data, status: 200 };
+    const { data, status } = await authetication_service_1.default.LoginWithGmail(req.body, (0, utils_1.getIssuer)(req));
+    return { data, status: 201 };
 }));
 router.post("/signup", (0, middleware_1.validation)(validators.signup), (0, middleware_1.responseFormatter)(async (req, res, next) => {
     const data = await authetication_service_1.default.signup(req.validate.body);
@@ -56,8 +57,8 @@ router.patch("/resend-confirm-email", (0, middleware_1.validation)(validators.re
     await authetication_service_1.default.resendConfirmEmail(req.body);
 }));
 router.post("/login", (0, middleware_1.validation)(validators.login), (0, middleware_1.responseFormatter)(async (req, res, next) => {
-    const data = await authetication_service_1.default.login(req.validate.body, `${req.protocol}://${req.get("host")}`);
-    return { data, status: 200 };
+    const data = await authetication_service_1.default.login(req.validate.body, (0, utils_1.getIssuer)(req));
+    return { data, status: 201 };
 }));
 router.post("/request-confirm-password", (0, middleware_1.validation)(validators.resendConfirmEmail), (0, middleware_1.responseFormatter)(async (req, res, next) => {
     await authetication_service_1.default.requestForgotPassword(req.validate.body);

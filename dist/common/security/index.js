@@ -16,4 +16,3 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./hash.security"), exports);
 __exportStar(require("./encryption.security"), exports);
-__exportStar(require("./token.security.js"), exports);

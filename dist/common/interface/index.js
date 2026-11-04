@@ -18,4 +18,4 @@ __exportStar(require("./error.interface"), exports);
 __exportStar(require("./response.interface"), exports);
 __exportStar(require("./user.interface"), exports);
 __exportStar(require("./paginate.interface"), exports);
-__exportStar(require("./authetication.interface"), exports);
+__exportStar(require("./multer.interface"), exports);
