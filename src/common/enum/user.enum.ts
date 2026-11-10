@@ -21,3 +21,9 @@ export enum TwoStepVerificationEnum {
     DISABLED,
     ENABLED
 }
+
+
+export enum ProfileVisibilityEnum {
+    PUBLIC,
+    PRIVATE
+}

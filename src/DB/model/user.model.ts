@@ -1,5 +1,5 @@
 import mongoose, { HydratedDocument } from "mongoose";
-import { GenderEnum, ProviderEnum, RoleEnum, TwoStepVerificationEnum } from "../../common/enum/index.js";
+import { GenderEnum, ProfileVisibilityEnum, ProviderEnum, RoleEnum, TwoStepVerificationEnum } from "../../common/enum/index.js";
 import { IUser } from "../../common/interface/user.interface.js";
 
 const userSchema = new mongoose.Schema<IUser>({
@@ -52,6 +52,20 @@ const userSchema = new mongoose.Schema<IUser>({
         default: RoleEnum.USER,
         enum:RoleEnum
     },
+     profileVisibility: {
+        type: Number,
+        enum: ProfileVisibilityEnum,
+        default: ProfileVisibilityEnum.PUBLIC
+    },
+    followers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }],
+    following: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }],
+
 
 }, {
     timestamps: true,
